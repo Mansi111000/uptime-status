@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  namespace: uptime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifier
+  template:
+    metadata:
+      labels:
+        app: notifier
+    spec:
+      containers:
+        - name: notifier
+          image: ghcr.io/YOUR_USER/uptime-notifier:main
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime
+            - name: REDIS_URL
+              value: redis://redis.uptime.svc.cluster.local:6379/0
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: notifier-secrets
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: notifier-secrets
+                  key: TELEGRAM_CHAT_ID
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notifier-secrets
+  namespace: uptime
+stringData:
+  TELEGRAM_BOT_TOKEN: ""
+  TELEGRAM_CHAT_ID: ""

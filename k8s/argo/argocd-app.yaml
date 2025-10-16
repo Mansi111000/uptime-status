@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uptime
+  namespace: argocd
+spec:
+  project: uptime
+  source:
+    repoURL: https://github.com/YOUR_USER/uptime-status
+    targetRevision: main
+    path: k8s/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: uptime
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

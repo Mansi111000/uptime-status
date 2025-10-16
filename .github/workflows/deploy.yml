@@ -1,0 +1,10 @@
+on:
+  push:
+    branches: [main]
+    paths: ["k8s/**"]
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Argo CD will auto-sync manifests in cluster (pull-based CD)."

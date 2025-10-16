@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor
+  namespace: uptime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitor
+  template:
+    metadata:
+      labels:
+        app: monitor
+    spec:
+      containers:
+        - name: monitor
+          image: ghcr.io/YOUR_USER/uptime-monitor:main
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime
+            - name: REDIS_URL
+              value: redis://redis.uptime.svc.cluster.local:6379/0
+          envFrom:
+            - configMapRef:
+                name: uptime-config

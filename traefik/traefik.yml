@@ -1,0 +1,11 @@
+api:
+  dashboard: false
+
+providers:
+  docker: {}
+  file:
+    filename: /dynamic.yml
+
+entryPoints:
+  web:
+    address: ":80"

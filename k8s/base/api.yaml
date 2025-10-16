@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: uptime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/YOUR_USER/uptime-api:main
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime
+            - name: REDIS_URL
+              value: redis://redis.uptime.svc.cluster.local:6379/0
+          envFrom:
+            - configMapRef:
+                name: uptime-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: uptime
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 8000
+      targetPort: 8000
