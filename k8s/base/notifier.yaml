@@ -15,12 +15,13 @@ spec:
     spec:
       containers:
         - name: notifier
-          image: ghcr.io/YOUR_USER/uptime-notifier:main
+          image: uptime-status-notifier:latest
+          imagePullPolicy: Never
           env:
             - name: DATABASE_URL
-              value: postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime
+              value: "postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime"
             - name: REDIS_URL
-              value: redis://redis.uptime.svc.cluster.local:6379/0
+              value: "redis://redis.uptime.svc.cluster.local:6379/0"
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -37,6 +38,7 @@ kind: Secret
 metadata:
   name: notifier-secrets
   namespace: uptime
+type: Opaque
 stringData:
-  TELEGRAM_BOT_TOKEN: ""
-  TELEGRAM_CHAT_ID: ""
+  TELEGRAM_BOT_TOKEN: ""   # fill me
+  TELEGRAM_CHAT_ID: ""     # fill me

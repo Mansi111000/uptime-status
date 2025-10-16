@@ -1,22 +1,19 @@
-from pydantic import BaseModel, HttpUrl
-from typing import List, Optional
+from typing import Literal, List
+from pydantic import BaseModel, HttpUrl, Field
 
-
-class MonitorCreate(BaseModel):
-    name: str
+class MonitorBase(BaseModel):
+    name: str = Field(min_length=1)
     url: HttpUrl
-    method: str = "GET"
-    interval_sec: int = 60
-    timeout_ms: int = 5000
+    method: Literal["GET", "HEAD", "POST"] = "GET"
+    interval_sec: int = Field(60, ge=15, le=3600)
+    timeout_ms: int = Field(5000, ge=500, le=30000)
     expected_statuses: List[int] = [200]
     is_enabled: bool = True
 
+class MonitorCreate(MonitorBase):
+    pass
 
-class MonitorOut(MonitorCreate):
+class MonitorOut(MonitorBase):
     id: int
-
-
-class SummaryOut(BaseModel):
-    uptime_percent: float
-    avg_latency_ms: Optional[float]
-    window: str
+    class Config:
+        from_attributes = True

@@ -1,5 +1,4 @@
-version: "3.9"
-
+# docker-compose.yml  (Compose v2 — no version field)
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,12 +9,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/dev-db.init.sql:/docker-entrypoint-initdb.d/1-init.sql:ro
+      - ./scripts/dev.db.init.sql:/docker-entrypoint-initdb.d/1-init.sql:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -24,11 +23,15 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
   traefik:
     image: traefik:v3.1
-    command: ["--providers.docker=true", "--entrypoints.web.address=:80"]
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"   # <-- add this
+      - "--entrypoints.web.address=:80"
+      - "--providers.file.filename=/dynamic.yml"
     ports:
       - "80:80"
     volumes:
@@ -36,38 +39,51 @@ services:
       - ./traefik/traefik.yml:/traefik.yml:ro
       - ./traefik/dynamic.yml:/dynamic.yml:ro
 
+
   api:
     build: ./services/api
     env_file: .env
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.api.middlewares=strip-api@file"
       - "traefik.http.services.api.loadbalancer.server.port=8000"
 
   monitor:
     build: ./services/monitor
     env_file: .env
     depends_on:
-      - api
-      - redis
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   notifier:
     build: ./services/notifier
     env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
     depends_on:
-      - api
-      - redis
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   status-web:
     build: ./services/status-web
     env_file: .env
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost/api
+      NEXT_PUBLIC_API_URL: http://api:8000
     depends_on:
-      - api
+      api:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"

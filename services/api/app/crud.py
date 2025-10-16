@@ -1,40 +1,32 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
-from . import models
-from datetime import datetime, timedelta, timezone
+from . import models, schemas
 
-
-def create_monitor(db: Session, payload):
-    m = models.Monitor(**payload.model_dump())
+def create_monitor(db: Session, payload: schemas.MonitorCreate) -> models.Monitor:
+    m = models.Monitor(
+        name=payload.name,
+        url=str(payload.url),
+        method=payload.method,
+        interval_sec=payload.interval_sec,
+        timeout_ms=payload.timeout_ms,
+        expected_statuses=list(payload.expected_statuses or [200]),
+        is_enabled=payload.is_enabled,
+    )
     db.add(m)
     db.commit()
     db.refresh(m)
     return m
 
-
-def list_monitors(db: Session):
-    return db.scalars(select(models.Monitor)).all()
-
+def list_monitors(db: Session) -> list[models.Monitor]:
+    return db.query(models.Monitor).order_by(models.Monitor.id.desc()).all()
 
 def get_summary(db: Session, monitor_id: int, window: str):
-    # window: 24h or 7d
-    now = datetime.now(timezone.utc)
-    delta = timedelta(hours=24) if window == "24h" else timedelta(days=7)
-    start = now - delta
-    q = select(models.Check).where(models.Check.monitor_id == monitor_id, models.Check.ts >= start)
-    rows = db.scalars(q).all()
-
-    if not rows:
-        return 0.0, None
-
-    ok_count = sum(1 for r in rows if r.ok)
-    uptime = (ok_count / len(rows)) * 100.0
-    latencies = [r.latency_ms for r in rows if r.latency_ms is not None]
-    avg = sum(latencies) / len(latencies) if latencies else None
-
-    return round(uptime, 2), (round(avg, 2) if avg else None)
-
+    # stub summary; you can extend with real time windows later
+    from sqlalchemy import func
+    avg_latency = db.query(func.avg(models.Check.latency_ms)).filter(models.Check.monitor_id == monitor_id).scalar()
+    total = db.query(models.Check).filter(models.Check.monitor_id == monitor_id).count()
+    ok = db.query(models.Check).filter(models.Check.monitor_id == monitor_id, models.Check.ok == True).count()
+    uptime = (ok / total * 100.0) if total else 0.0
+    return round(uptime, 2), int(avg_latency or 0)
 
 def active_incidents(db: Session):
-    q = select(models.Incident).where(models.Incident.state == "open")
-    return db.scalars(q).all()
+    return db.query(models.Incident).filter(models.Incident.state == "open").all()

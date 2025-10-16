@@ -15,12 +15,14 @@ spec:
     spec:
       containers:
         - name: monitor
-          image: ghcr.io/YOUR_USER/uptime-monitor:main
+          image: uptime-status-monitor:latest
+          imagePullPolicy: Never
           env:
             - name: DATABASE_URL
-              value: postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime
+              value: "postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime"
             - name: REDIS_URL
-              value: redis://redis.uptime.svc.cluster.local:6379/0
-          envFrom:
-            - configMapRef:
-                name: uptime-config
+              value: "redis://redis.uptime.svc.cluster.local:6379/0"
+            - name: FAILURE_THRESHOLD
+              value: "3"
+            - name: RECOVERY_THRESHOLD
+              value: "2"
