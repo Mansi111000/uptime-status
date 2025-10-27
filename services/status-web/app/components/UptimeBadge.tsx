@@ -1,15 +1,18 @@
-export function UptimeBadge({ pct }: { pct: number }) {
-    const color = pct > 99 ? 'green' : pct > 95 ? 'orange' : 'red';
+"use client";
+
+export default function UptimeBadge({ value }: { value: number | undefined }) {
+  if (value == null) {
     return (
-        <span
-            style={{
-                padding: '4px 8px',
-                borderRadius: 8,
-                background: color,
-                color: '#fff'
-            }}
-        >
-            {pct.toFixed(2)}%
-        </span>
+      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-700 text-gray-300">
+        --
+      </span>
     );
+  }
+  const color =
+    value >= 99.9 ? "bg-green-600" : value >= 98 ? "bg-yellow-600" : "bg-red-600";
+  return (
+    <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs text-white ${color}`}>
+      {value.toFixed(2)}%
+    </span>
+  );
 }
