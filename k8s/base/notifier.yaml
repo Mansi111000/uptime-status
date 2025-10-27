@@ -15,13 +15,16 @@ spec:
     spec:
       containers:
         - name: notifier
+          # If you build locally inside the cluster node, keep Never; otherwise use IfNotPresent and a registry image
           image: uptime-status-notifier:latest
           imagePullPolicy: Never
           env:
             - name: DATABASE_URL
-              value: "postgresql+psycopg://uptime:uptime@postgres.uptime.svc.cluster.local:5432/uptime"
+              # use short service name
+              value: postgresql+psycopg://uptime:uptime@postgres:5432/uptime
             - name: REDIS_URL
-              value: "redis://redis.uptime.svc.cluster.local:6379/0"
+              # use short service name
+              value: redis://redis:6379/0
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -40,5 +43,5 @@ metadata:
   namespace: uptime
 type: Opaque
 stringData:
-  TELEGRAM_BOT_TOKEN: ""   # fill me
-  TELEGRAM_CHAT_ID: ""     # fill me
+  TELEGRAM_BOT_TOKEN: "8260175033:AAG47nSgGtDws1810Ju9fKLoTkyfrDH_ocw"   # fill with your bot token
+  TELEGRAM_CHAT_ID: "1325400360"     # fill with your chat id
