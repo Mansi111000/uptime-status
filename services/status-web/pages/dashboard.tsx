@@ -1,197 +1,197 @@
-"use client";
+import Head from "next/head";
+import useSWR from "swr";
+import { useMemo, useState } from "react";
+import { Panel, KPI, Pill, StatusBadge, TrendBars, Cog } from "../app/components/DashboardBits";
+import Link from "next/link";
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Card, CardHeader, CardTitle, CardContent } from "../app/components/ui/card";
-import UptimeBadge from "../app/components/UptimeBadge";
-import { UptimeBar, LatencyLine } from "../app/components/Charts";
-import { Database, Cloud, Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 type Monitor = {
   id: number;
   name: string;
   url: string;
-  interval_sec: number;
-  is_enabled: boolean;
   method: string;
+  interval_sec: number;
   timeout_ms: number;
+  is_enabled: boolean;
   expected_statuses: number[];
-  created_at: string;
 };
 
-type Summary = { uptime_percent: number; avg_latency_ms: number; window: string };
+type SummaryPoint = { ts: string; ms: number; ok: boolean };
+
+function useMonitors() {
+  const { data, isLoading, error } = useSWR<Monitor[]>("/api/public/monitors", fetcher, { refreshInterval: 15000 });
+  return { monitors: data ?? [], isLoading, error };
+}
+
+function useSummary(id?: number, window = "24h") {
+  const shouldFetch = !!id;
+  const { data } = useSWR<SummaryPoint[]>(
+    shouldFetch ? `/api/public/monitors/${id}/summary?window=${window}` : null,
+    fetcher,
+    { refreshInterval: 15000 }
+  );
+  return data ?? [];
+}
 
 export default function Dashboard() {
-  const [monitors, setMonitors] = useState<Monitor[]>([]);
-  const [publicMonitors, setPublicMonitors] = useState<Monitor[]>([]);
-  const [summaries, setSummaries] = useState<Record<number, Summary>>({});
-  const [incidents, setIncidents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { monitors, isLoading } = useMonitors();
+  const [q, setQ] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "HTTP" | "PING" | "PORT">("ALL");
+  const [stateFilter, setStateFilter] = useState<"ALL" | "ENABLED" | "PAUSED">("ALL");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [mRes, pmRes, incRes] = await Promise.all([
-          fetch("/api/monitors"),
-          fetch("/api/public/monitors"),
-          fetch("/api/public/incidents/active"),
-        ]);
-        const [m, pm, inc] = await Promise.all([mRes.json(), pmRes.json(), incRes.json()]);
-        setMonitors(m);
-        setPublicMonitors(pm);
-        setIncidents(Array.isArray(inc) ? inc : []);
+  const filtered = useMemo(() => {
+    return (monitors ?? []).filter(m => {
+      const t =
+        m.method === "PING" ? "PING" :
+        m.method === "PORT" ? "PORT" : "HTTP";
+      const passType = typeFilter === "ALL" || t === typeFilter;
+      const passState = stateFilter === "ALL" || (stateFilter === "ENABLED" ? m.is_enabled : !m.is_enabled);
+      const passQ =
+        q.trim().length === 0 ||
+        m.name.toLowerCase().includes(q.toLowerCase()) ||
+        m.url.toLowerCase().includes(q.toLowerCase());
+      return passType && passState && passQ;
+    });
+  }, [monitors, q, typeFilter, stateFilter]);
 
-        // fetch summaries for each public monitor
-        const map: Record<number, Summary> = {};
-        for (const mon of pm) {
-          const s = await fetch(`/api/public/monitors/${mon.id}/summary?window=24h`).then(r => r.json());
-          map[mon.id] = s;
-        }
-        setSummaries(map);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const uptimeData = publicMonitors.map(m => ({ name: m.name, uptime: summaries[m.id]?.uptime_percent ?? 0 }));
-  const latencyData = publicMonitors.map(m => ({ name: m.name, latency: summaries[m.id]?.avg_latency_ms ?? 0 }));
+  const kpis = useMemo(() => {
+    let up = 0, down = 0, paused = 0;
+    monitors.forEach((m) => {
+      if (!m.is_enabled) paused += 1;
+      else up += 1; // treat unknown as up for now; your monitor service will flip this over time
+    });
+    return { up, down, paused };
+  }, [monitors]);
 
   return (
-    <div className="p-8 space-y-8 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen text-gray-100">
-      <motion.h1
-        className="text-4xl font-bold text-center mb-6 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        🌐 Uptime Dashboard
-      </motion.h1>
+    <>
+      <Head><title>Uptime Status • Dashboard</title></Head>
 
-      {loading ? (
-        <p className="text-center text-gray-400">Loading…</p>
-      ) : (
-        <>
-          {/* quick status tiles */}
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="bg-gray-800/70 border-gray-700">
-              <CardHeader className="flex items-center justify-between">
-                <CardTitle className="text-lg">Database</CardTitle>
-                <Database className="text-blue-400" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-green-400 font-semibold flex items-center gap-2">
-                  <CheckCircle2 /> Connected
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gray-800/70 border-gray-700">
-              <CardHeader className="flex items-center justify-between">
-                <CardTitle className="text-lg">Redis</CardTitle>
-                <Cloud className="text-yellow-400" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-green-400 font-semibold flex items-center gap-2">
-                  <CheckCircle2 /> Connected
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gray-800/70 border-gray-700">
-              <CardHeader className="flex items-center justify-between">
-                <CardTitle className="text-lg">Notifier</CardTitle>
-                <Activity className="text-pink-400" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-green-400 font-semibold flex items-center gap-2">
-                  <CheckCircle2 /> Active
-                </p>
-              </CardContent>
-            </Card>
+      <div className="min-h-screen grid grid-cols-[240px_1fr] bg-grid px-0">
+        {/* Sidebar */}
+        <aside className="hidden md:block bg-sidebar/70 backdrop-blur-sm border-r border-white/5">
+          <div className="p-4 text-sm font-medium text-white/80">Uptime</div>
+          <nav className="px-2 space-y-1 text-sm">
+            <NavLink href="/dashboard" label="Uptime" active />
+            <NavLink href="#" label="Incidents" />
+            <NavLink href="#" label="Status pages" />
+            <NavLink href="#" label="Maintenance" />
+            <NavLink href="#" label="Settings" />
+          </nav>
+          <div className="absolute bottom-4 left-0 right-0 px-4 text-xs text-white/40">
+            Bluewave Uptime • Super Admin
+          </div>
+        </aside>
+
+        {/* Main */}
+        <main className="p-4 md:p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold text-white flex items-center gap-2">
+                ⚡ Uptime Status
+              </h1>
+              <p className="text-white/50 text-sm mt-1">
+                A quick overview of your monitors.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-primary">Create new</button>
+              <button className="btn-ghost">Bulk Import</button>
+            </div>
           </div>
 
-          {/* charts */}
-          <div className="grid md:grid-cols-2 gap-8 mt-8">
-            <Card className="bg-gray-800/70 border-gray-700">
-              <CardHeader><CardTitle>Uptime (24h)</CardTitle></CardHeader>
-              <CardContent><UptimeBar data={uptimeData} /></CardContent>
-            </Card>
-            <Card className="bg-gray-800/70 border-gray-700">
-              <CardHeader><CardTitle>Average Latency (ms)</CardTitle></CardHeader>
-              <CardContent><LatencyLine data={latencyData} /></CardContent>
-            </Card>
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+            <KPI title="UP" value={kpis.up} accent="ok" />
+            <KPI title="DOWN" value={kpis.down} accent="bad" />
+            <KPI title="PAUSED" value={kpis.paused} />
           </div>
 
-          {/* monitors (private + public) */}
-          <div className="grid md:grid-cols-2 gap-8">
-            <Card className="bg-gray-800/70 border-gray-700 mt-8">
-              <CardHeader><CardTitle>/api/monitors</CardTitle></CardHeader>
-              <CardContent>
-                <table className="w-full text-sm text-left">
-                  <thead className="text-gray-400 border-b border-gray-700">
-                    <tr>
-                      <th className="py-2">Name</th><th>URL</th><th>Method</th><th>Enabled</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monitors.map((m) => (
-                      <tr key={m.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition">
-                        <td className="py-2 font-medium">{m.name}</td>
-                        <td>{m.url}</td>
-                        <td>{m.method}</td>
-                        <td>{m.is_enabled ? "Yes" : "No"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gray-800/70 border-gray-700 mt-8">
-              <CardHeader><CardTitle>/api/public/monitors + summary</CardTitle></CardHeader>
-              <CardContent>
-                <table className="w-full text-sm text-left">
-                  <thead className="text-gray-400 border-b border-gray-700">
-                    <tr>
-                      <th className="py-2">Name</th><th>Uptime %</th><th>Latency (ms)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {publicMonitors.map((m) => (
-                      <tr key={m.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition">
-                        <td className="py-2 font-medium">{m.name}</td>
-                        <td><UptimeBadge value={summaries[m.id]?.uptime_percent} /></td>
-                        <td>{summaries[m.id]?.avg_latency_ms?.toFixed(0) ?? "--"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
+          {/* Filters */}
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Pill active>Monitors: {filtered.length}</Pill>
+            </div>
+            <div className="h-6 w-px bg-white/10" />
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 text-xs">Type</span>
+              {(["ALL","HTTP","PING","PORT"] as const).map(t => (
+                <Pill key={t} active={typeFilter===t} onClick={()=>setTypeFilter(t)}>{t}</Pill>
+              ))}
+            </div>
+            <div className="h-6 w-px bg-white/10" />
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 text-xs">State</span>
+              {(["ALL","ENABLED","PAUSED"] as const).map(s => (
+                <Pill key={s} active={stateFilter===s} onClick={()=>setStateFilter(s)}>{s}</Pill>
+              ))}
+            </div>
+            <div className="ml-auto w-full sm:w-80">
+              <input
+                placeholder="Search monitors…"
+                className="input"
+                value={q}
+                onChange={(e)=>setQ(e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* incidents */}
-          <Card className="bg-gray-800/70 border-gray-700 mt-8">
-            <CardHeader className="flex items-center gap-2">
-              <AlertCircle className="text-red-400" />
-              <CardTitle>Active Incidents</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {incidents.length === 0 ? (
-                <p className="text-gray-400">No active incidents 🎉</p>
-              ) : (
-                <ul className="list-disc pl-6">
-                  {incidents.map((i, idx) => (
-                    <li key={idx} className="mb-1 text-red-300">
-                      #{i.id ?? "—"} · monitor {i.monitor_id ?? "—"} · {i.reason ?? "—"}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+          {/* List */}
+          <Panel className="mt-6 overflow-hidden">
+            <div className="grid grid-cols-[1fr_120px_minmax(240px,1fr)_120px_56px] px-4 py-3 text-xs uppercase tracking-wide text-white/40">
+              <div>Host</div><div>Status</div><div>Response time</div><div>Type</div><div className="text-right">Actions</div>
+            </div>
+            <div className="divide-y divide-white/5">
+              {(isLoading ? Array.from({length:4}) : filtered).map((m, i) => (
+                <MonitorRow key={(m as any)?.id ?? i} monitor={m as Monitor} loading={isLoading}/>
+              ))}
+            </div>
+          </Panel>
+        </main>
+      </div>
+    </>
+  );
+}
+
+function NavLink({ href, label, active=false }:{href:string; label:string; active?:boolean}) {
+  return (
+    <Link href={href} className={`block px-3 py-2 rounded-xl transition
+      ${active ? "bg-white/10 text-white" : "text-white/60 hover:text-white hover:bg-white/5"}`}>
+      {label}
+    </Link>
+  );
+}
+
+function MonitorRow({ monitor, loading }:{monitor?:Monitor; loading:boolean}) {
+  const points = useSummary(monitor?.id);
+  const lastOk = points.length ? points[points.length-1].ok : true;
+  const type =
+    monitor?.method === "PING" ? "PING" :
+    monitor?.method === "PORT" ? "PORT" : "HTTP(S)";
+
+  return (
+    <div className="grid grid-cols-[1fr_120px_minmax(240px,1fr)_120px_56px] items-center px-4 py-3">
+      <div className="min-w-0">
+        <div className="font-medium text-white truncate">{loading ? "—" : monitor?.name}</div>
+        <a href={monitor?.url} className="text-xs text-sky-400/80 hover:text-sky-300 truncate block">
+          {loading ? " " : monitor?.url}
+        </a>
+      </div>
+      <div>
+        <StatusBadge ok={loading ? true : (monitor?.is_enabled ? lastOk : false)} paused={!monitor?.is_enabled}/>
+      </div>
+      <div className="pr-4">
+        <TrendBars
+          points={(points ?? []).map(p => ({ v: Math.min(1000, p.ms), ok: p.ok }))}
+          max={1000}
+          loading={loading}
+        />
+      </div>
+      <div className="text-white/70 text-sm">{type}</div>
+      <div className="text-right">
+        <button className="icon-btn" aria-label="settings"><Cog /></button>
+      </div>
     </div>
   );
 }

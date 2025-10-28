@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light polish */
+:root {
+  color-scheme: dark;
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-900 text-gray-100;
+}
+
+.card {
+  @apply bg-gray-800/70 border border-gray-700 rounded-2xl shadow-md;
+}
+
+/* Subtle grid background + card colors */
+:root {
+  --bg1: #0b1020;
+  --bg2: #0e1630;
+  --card: #0f172acc;
+}
+
+.bg-grid {
+  background:
+    radial-gradient(1100px 500px at 80% -10%, #1a2a6c22, transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, #8d5bff22, transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg2));
+}
+
+.bg-sidebar { background: #0b0f1a; }
+.bg-card { background: var(--card); }
+
+.btn-primary {
+  @apply px-3 py-2 rounded-xl bg-white text-black text-sm font-medium hover:bg-white/90 transition;
+}
+.btn-ghost {
+  @apply px-3 py-2 rounded-xl border border-white/15 text-white text-sm hover:bg-white/10 transition;
+}
+.input {
+  @apply w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20;
+}
+.icon-btn {
+  @apply p-2 rounded-lg hover:bg-white/10 transition;
+}
+

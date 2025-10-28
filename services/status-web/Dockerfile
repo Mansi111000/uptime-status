@@ -1,33 +1,41 @@
-# services/status-web/Dockerfile
-
-# --- deps stage: install node_modules with cache ---
+# ---------- deps stage ----------
 FROM node:20-bullseye-slim AS deps
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+
+# Use BuildKit cache for npm
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm true
+
+# Only lock + manifest for clean installs
 COPY package*.json ./
-# Cache npm folder between builds (BuildKit required; Docker Desktop has it)
 RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm ci
 
-# --- build stage: copy source and build Next ---
+# ---------- build stage ----------
 FROM node:20-bullseye-slim AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+
+# Bring in deps (node_modules) just for building
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# ensure public dir exists (avoids COPY warnings later)
-RUN mkdir -p public
+
+# Build Next app (standalone output)
 RUN npm run build
 
-# --- runtime stage: only what we need to run Next ---
+# ---------- runtime stage ----------
 FROM node:20-bullseye-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-# copy the output and minimal files for runtime
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
-COPY --from=build /app/package.json ./package.json
-COPY --from=deps  /app/node_modules ./node_modules
+ENV PORT=3000
 EXPOSE 3000
-CMD ["npm", "start"]
+
+# Copy only the minimal runtime produced by standalone build
+# This contains the server and the subset of node_modules Next needs
+COPY --from=build /app/.next/standalone ./.next/standalone
+COPY --from=build /app/.next/static ./.next/static
+# If you have any public assets
+COPY --from=build /app/public ./public
+
+# Optional: health check route if you have one
+# HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:3000/ || exit 1
+
+CMD ["node", ".next/standalone/server.js"]
