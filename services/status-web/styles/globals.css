@@ -1,51 +1,224 @@
+/* services/status-web/styles/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Light polish */
-:root {
-  color-scheme: dark;
+/* ────────────────────────────────────────────────────────────────────────────
+   THEME TOKENS (light/dark)
+   Keep colors neutral + a single brand hue; override in tailwind.config if needed.
+──────────────────────────────────────────────────────────────────────────── */
+:root{
+  --bg:            248 248 248;   /* neutral-50 */
+  --fg:            23 23 23;      /* neutral-900 */
+  --muted:         115 115 115;   /* neutral-500 */
+
+  --card:          255 255 255;   /* white */
+  --card-border:   229 229 229;   /* neutral-200 */
+
+  --ring:          59 130 246;    /* brand ring (blue-500) */
+
+  --brand:         99 102 241;    /* indigo-500 */
+  --brand-600:     79 70 229;     /* indigo-600 */
+  --brand-700:     67 56 202;     /* indigo-700 */
+
+  --up:            16 185 129;    /* emerald-500 */
+  --down:          239 68 68;     /* red-500 */
+  --paused:        245 158 11;    /* amber-500 */
+
+  --surface:       250 250 250;   /* neutral-50 */
+  --elevated:      255 255 255;   /* white */
+
+  --shadow:        0 10px 20px 0 rgb(0 0 0 / 0.04),
+                   0 4px  6px  0 rgb(0 0 0 / 0.06);
 }
 
-html, body, #__next {
-  height: 100%;
+:root[class~="dark"]{
+  --bg:            10 10 11;      /* neutral-950 */
+  --fg:            245 245 245;   /* neutral-100 */
+  --muted:         163 163 163;   /* neutral-400 */
+
+  --card:          17 17 19;      /* neutral-900 */
+  --card-border:   38 38 38;      /* neutral-800 */
+
+  --ring:          99 102 241;    /* indigo-500 */
+
+  --surface:       15 15 16;      /* near black */
+  --elevated:      17 17 19;
+
+  --shadow:        0 10px 20px 0 rgb(0 0 0 / 0.35),
+                   0  4px  6px 0 rgb(0 0 0 / 0.28);
 }
 
-body {
-  @apply bg-gray-900 text-gray-100;
+/* ────────────────────────────────────────────────────────────────────────────
+   BASE RESETS + TYPOGRAPHY
+──────────────────────────────────────────────────────────────────────────── */
+html, body, #__next { height: 100%; }
+html { scroll-behavior: smooth; }
+* { -webkit-tap-highlight-color: transparent; }
+
+@layer base{
+  body{
+    @apply antialiased selection:bg-indigo-200/40 dark:selection:bg-indigo-800/40;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--fg));
+    font-feature-settings: "ss01","ss02","cv01";
+  }
+
+  h1{@apply text-3xl/tight md:text-4xl font-semibold tracking-tight;}
+  h2{@apply text-2xl md:text-3xl font-semibold tracking-tight;}
+  h3{@apply text-xl md:text-2xl font-semibold;}
+  p {@apply text-sm md:text-base text-neutral-600 dark:text-neutral-300;}
+  a {@apply underline-offset-4 hover:underline decoration-neutral-400 dark:decoration-neutral-600;}
 }
 
-.card {
-  @apply bg-gray-800/70 border border-gray-700 rounded-2xl shadow-md;
+/* Focus ring that looks good on dark/light */
+@layer utilities{
+  .focus-ring{ box-shadow: 0 0 0 3px rgb(var(--ring) / .35); }
 }
 
-/* Subtle grid background + card colors */
-:root {
-  --bg1: #0b1020;
-  --bg2: #0e1630;
-  --card: #0f172acc;
+/* ────────────────────────────────────────────────────────────────────────────
+   LAYOUT HELPERS
+──────────────────────────────────────────────────────────────────────────── */
+.container-app{ @apply max-w-7xl mx-auto px-4 md:px-6 lg:px-8; }
+.section-gap{ @apply space-y-6 md:space-y-8; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   COMPONENTS (cards, buttons, badges, inputs, table, skeleton)
+──────────────────────────────────────────────────────────────────────────── */
+@layer components{
+  /* Card */
+  .card{
+    background-color: rgb(var(--card));
+    border: 1px solid rgb(var(--card-border));
+    box-shadow: var(--shadow);
+    @apply rounded-2xl;
+  }
+  .card-sm{@apply card p-4;}
+  .card-md{@apply card p-6;}
+  .card-lg{@apply card p-8;}
+
+  /* Buttons */
+  .btn{
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           px-3.5 py-2.5 text-sm font-medium transition
+           border border-transparent;
+  }
+  .btn:focus-visible{ outline: none; @apply focus-ring; }
+  .btn-primary{
+    background-color: rgb(var(--brand));
+    @apply text-white hover:opacity-90 active:opacity-80;
+  }
+  .btn-ghost{
+    @apply bg-transparent text-neutral-700 dark:text-neutral-200
+           hover:bg-neutral-100/70 dark:hover:bg-neutral-800/60
+           border border-neutral-200/70 dark:border-neutral-800;
+  }
+  .btn-muted{
+    @apply bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100
+           hover:bg-neutral-200/70 dark:hover:bg-neutral-700;
+  }
+  .btn-danger{
+    @apply bg-red-500 text-white hover:bg-red-600;
+  }
+
+  /* Badges / pills */
+  .badge{
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+           text-xs font-medium border;
+  }
+  .badge-up{
+    border-color: rgb(16 185 129 / .25);
+    background-color: rgb(16 185 129 / .10);
+    color: rgb(16 185 129);
+  }
+  .badge-down{
+    border-color: rgb(239 68 68 / .25);
+    background-color: rgb(239 68 68 / .10);
+    color: rgb(239 68 68);
+  }
+  .badge-paused{
+    border-color: rgb(245 158 11 / .25);
+    background-color: rgb(245 158 11 / .12);
+    color: rgb(245 158 11);
+  }
+  .badge-neutral{
+    @apply border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300
+           bg-neutral-100/60 dark:bg-neutral-800/60;
+  }
+
+  /* Inputs */
+  .input{
+    @apply w-full rounded-xl border border-neutral-200 dark:border-neutral-700
+           bg-white dark:bg-neutral-900 px-3 py-2.5 text-sm
+           placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+           focus:outline-none focus:ring-2 focus:ring-indigo-500/30;
+  }
+  .select{ @apply input pr-9; }
+  .switch{
+    @apply relative inline-flex h-5 w-9 items-center rounded-full
+           bg-neutral-300 dark:bg-neutral-700 transition;
+  }
+  .switch-dot{
+    @apply h-4 w-4 translate-x-0 rounded-full bg-white dark:bg-neutral-200
+           shadow transition;
+  }
+  .switch[data-checked="true"]{ @apply bg-indigo-500/90; }
+  .switch[data-checked="true"] .switch-dot{ @apply translate-x-4; }
+
+  /* Compact table */
+  .table{
+    @apply w-full text-sm overflow-hidden rounded-xl border
+           border-neutral-200 dark:border-neutral-800;
+  }
+  .table thead th{
+    @apply bg-neutral-100/70 dark:bg-neutral-900/60 text-neutral-700 dark:text-neutral-300
+           font-medium px-3 py-2.5 text-left;
+  }
+  .table tbody td{
+    @apply px-3 py-2.5 border-t border-neutral-200/70 dark:border-neutral-800/70
+           align-middle text-neutral-700 dark:text-neutral-300;
+  }
+  .table tbody tr:hover{
+    @apply bg-neutral-50 dark:bg-neutral-900/40;
+  }
+
+  /* KPI tiles */
+  .kpi{
+    @apply card p-4 flex items-center justify-between;
+  }
+  .kpi .value{ @apply text-2xl font-semibold; }
+  .kpi .label{ @apply text-xs text-neutral-500 dark:text-neutral-400; }
+
+  /* Skeleton shimmer */
+  .skeleton{
+    --sh: linear-gradient(90deg, transparent, rgb(255 255 255 / .35), transparent);
+    @apply relative overflow-hidden bg-neutral-200/70 dark:bg-neutral-800/70 rounded-md;
+  }
+  .skeleton::after{
+    content:""; position:absolute; inset:-50% 0;
+    background: var(--sh); transform: translateX(-100%);
+    animation: shimmer 1.25s infinite;
+  }
+  @keyframes shimmer{ to { transform: translateX(100%); } }
+
+  /* Scrollbar (Chromium) */
+  .nice-scroll{
+    scrollbar-width: thin;
+  }
+  .nice-scroll::-webkit-scrollbar{ height:10px; width:10px; }
+  .nice-scroll::-webkit-scrollbar-thumb{
+    background: rgb(163 163 163 / .35);
+    border-radius: 999px;
+  }
+  .nice-scroll::-webkit-scrollbar-thumb:hover{
+    background: rgb(163 163 163 / .55);
+  }
 }
 
-.bg-grid {
-  background:
-    radial-gradient(1100px 500px at 80% -10%, #1a2a6c22, transparent 60%),
-    radial-gradient(900px 500px at -10% 10%, #8d5bff22, transparent 60%),
-    linear-gradient(180deg, var(--bg1), var(--bg2));
+/* ────────────────────────────────────────────────────────────────────────────
+   ACCESSIBILITY / MOTION
+──────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important;
+     transition-duration:0.001ms !important; scroll-behavior:auto !important; }
 }
-
-.bg-sidebar { background: #0b0f1a; }
-.bg-card { background: var(--card); }
-
-.btn-primary {
-  @apply px-3 py-2 rounded-xl bg-white text-black text-sm font-medium hover:bg-white/90 transition;
-}
-.btn-ghost {
-  @apply px-3 py-2 rounded-xl border border-white/15 text-white text-sm hover:bg-white/10 transition;
-}
-.input {
-  @apply w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20;
-}
-.icon-btn {
-  @apply p-2 rounded-lg hover:bg-white/10 transition;
-}
-

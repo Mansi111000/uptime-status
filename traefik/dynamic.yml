@@ -4,3 +4,4 @@ http:
       stripPrefix:
         prefixes:
           - /api
+        forceSlash: false

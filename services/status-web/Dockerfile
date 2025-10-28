@@ -1,14 +1,9 @@
-# ---------- deps stage ----------
+# 1) deps
 FROM node:20-bullseye-slim AS deps
 WORKDIR /app
-
-# Use BuildKit cache for npm
-RUN --mount=type=cache,id=npm-cache,target=/root/.npm true
-
-# Only lock + manifest for clean installs
 COPY package*.json ./
-RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
-    npm ci
+# Do NOT omit dev deps here – Tailwind needs to run at build time
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm npm ci
 
 # ---------- build stage ----------
 FROM node:20-bullseye-slim AS build

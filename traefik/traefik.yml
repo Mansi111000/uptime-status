@@ -2,7 +2,8 @@ api:
   dashboard: false
 
 providers:
-  docker: {}
+  docker:
+    exposedByDefault: false     # <-- important
   file:
     filename: /dynamic.yml
 
