@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  labels: { app: notifier }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notifier } }
+  template:
+    metadata: { labels: { app: notifier } }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+      containers:
+        - name: notifier
+          image: ghcr.io/OWNER/REPO-notifier:dev
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: uptime-secrets, key: DATABASE_URL } } }
+            - { name: REDIS_URL, valueFrom: { secretKeyRef: { name: uptime-secrets, key: REDIS_URL } } }
+            - { name: TELEGRAM_BOT_TOKEN, valueFrom: { secretKeyRef: { name: uptime-secrets, key: TELEGRAM_BOT_TOKEN } } }
+            - { name: TELEGRAM_CHAT_ID,  valueFrom: { secretKeyRef: { name: uptime-secrets, key: TELEGRAM_CHAT_ID } } }
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "256Mi" }

@@ -1,0 +1,7 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata: { name: enforce-no-latest }
+spec:
+  match: { kinds: [{ apiGroups: [""], kinds: ["Pod"] }] }
+  parameters:
+    repos: ["ghcr.io/OWNER/REPO-"]

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-web
+  labels: { app: status-web }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: status-web } }
+  template:
+    metadata: { labels: { app: status-web } }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: status-web
+          image: ghcr.io/OWNER/REPO-status-web:dev
+          ports: [{ containerPort: 3000 }]
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://api:8000"
+          readinessProbe: { httpGet: { path: /, port: 3000 }, initialDelaySeconds: 3, periodSeconds: 5 }
+          livenessProbe:  { httpGet: { path: /, port: 3000 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-web
+spec:
+  selector: { app: status-web }
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP

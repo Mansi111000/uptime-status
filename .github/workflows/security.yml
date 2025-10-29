@@ -1,40 +1,38 @@
 name: Security
-on: [push]
+on:
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  sast:
+  semgrep:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: returntocorp/semgrep-action@v1
         with:
-          auditOn: push
+          config: >-
+            p/ci
+            p/python
+            p/javascript
 
-  secrets:
+  gitleaks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  images:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: aquasecurity/trivy-action@0.24.0
-        with:
-          scan-type: fs
-          ignore-unfixed: true
-
-  sbom:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: anchore/syft-action@v0.17.0
-        with:
-          output-file: sbom.syft.json
-
-  iac:
+  trivy-fs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: bridgecrewio/checkov-action@master
+      - uses: aquasecurity/trivy-action@0.22.0
         with:
-          directory: .
+          scan-type: fs
+          format: sarif
+          output: trivy-fs.sarif
+          ignore-unfixed: true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif

@@ -1,29 +1,69 @@
 name: CI
-on: [push]
 
-permissions:
-  contents: read
-  packages: write
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: OWNER
+  REPO: REPO
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     strategy:
       matrix:
-        svc: [api, monitor, notifier, status-web]
+        svc: [api, status-web, monitor, notifier]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image vars
+        id: vars
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.REPO }}-${{ matrix.svc }}
+          TAG=${GITHUB_SHA::7}
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - uses: docker/build-push-action@v6
+      - name: Build
+        uses: docker/build-push-action@v5
         with:
           context: ./services/${{ matrix.svc }}
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/uptime-${{ matrix.svc }}:main
+          tags: |
+            ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+            ${{ steps.vars.outputs.image }}:dev
+
+      - name: Trivy image scan (non-blocking)
+        uses: aquasecurity/trivy-action@0.22.0
+        with:
+          image-ref: ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+          format: sarif
+          output: trivy-${{ matrix.svc }}.sarif
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.svc }}.sarif
+
+      - name: Cosign sign (keyless)
+        uses: sigstore/cosign-installer@v3
+      - run: |
+          cosign sign --yes ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+          cosign sign --yes ${{ steps.vars.outputs.image }}:dev

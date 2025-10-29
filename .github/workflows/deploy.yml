@@ -1,10 +1,31 @@
+name: Deploy (bump dev overlay)
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths: ["k8s/**"]
 
 jobs:
-  noop:
+  bump-dev-overlay:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Argo CD will auto-sync manifests in cluster (pull-based CD)."
+      - uses: actions/checkout@v4
+
+      - name: Compute new tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Bump tags in kustomization
+        run: |
+          FILE=k8s/overlays/dev/kustomization.yaml
+          sed -i "s/newTag: .*/newTag: ${{ steps.tag.outputs.sha }}/" $FILE
+
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: bump dev images to ${{ steps.tag.outputs.sha }}"
+          title: "Bump dev images to ${{ steps.tag.outputs.sha }}"
+          body: "Auto bump from CI"
+          branch: "bump/dev-${{ steps.tag.outputs.sha }}"
+          base: "main"
