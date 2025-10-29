@@ -4,15 +4,13 @@ import httpx
 import redis
 from datetime import datetime, timezone
 from sqlalchemy import select
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import ProgrammingError, OperationalError
 
-from db import SessionLocal, engine
+from db import SessionLocal, engine, Base
 from models import Monitor, Check, Incident
-from db import Base  # Declarative base from db.py
 
 DB = os.getenv("DATABASE_URL")
-r = redis.from_url(os.getenv("REDIS_URL"))
-
+REDIS_URL = os.getenv("REDIS_URL") or "redis://redis:6379/0"
 FAIL_THRESHOLD = int(os.getenv("FAIL_THRESHOLD", 3))
 RECOVER_THRESHOLD = int(os.getenv("RECOVER_THRESHOLD", 2))
 DEFAULT_INTERVAL = int(os.getenv("DEFAULT_INTERVAL_SEC", 60))
@@ -21,15 +19,31 @@ TIMEOUT_MS = int(os.getenv("CHECK_TIMEOUT_MS", 5000))
 KEY_FAILS = "fails:"
 KEY_PASSES = "passes:"
 
+def wait_for_redis(url: str, attempts=60, delay=1):
+    last = None
+    for i in range(1, attempts + 1):
+        try:
+            client = redis.from_url(url)
+            client.ping()
+            print(f"[monitor] Redis ready after {i} attempt(s).")
+            return client
+        except Exception as e:
+            last = e
+            print(f"[monitor] Redis not ready ({e}); retry {i}/{attempts} in {delay}s…")
+            time.sleep(delay)
+    raise RuntimeError(f"Redis never became ready: {last}")
+
+r = wait_for_redis(REDIS_URL)
+
 def Session():
     return SessionLocal()
 
 def ensure_tables_once():
-    # If API hasn’t created tables yet, do it here; safe & idempotent.
-    # Importing models above registers tables on Base.
+    """Create tables if they don’t exist. Safe to call multiple times."""
     Base.metadata.create_all(bind=engine)
 
 def enqueue_alert(event: dict):
+    """Push incident/recovery events to Redis queue."""
     r.lpush("alerts", json.dumps(event))
 
 def tick_once():
@@ -87,25 +101,40 @@ def tick_once():
                 if fails >= FAIL_THRESHOLD:
                     open_key = f"incident_open:{m.id}"
                     if not r.get(open_key):
-                        inc = Incident(monitor_id=m.id, reason=err or (f"HTTP {status_code}" if status_code else "network error"))
-                        s.add(inc); s.commit(); s.refresh(inc)
+                        inc = Incident(
+                            monitor_id=m.id,
+                            reason=err or (f"HTTP {status_code}" if status_code else "network error")
+                        )
+                        s.add(inc)
+                        s.commit()
+                        s.refresh(inc)
                         r.set(open_key, str(inc.id))
-                        enqueue_alert({"type": "incident", "monitor_id": m.id, "incident_id": inc.id, "reason": inc.reason})
+                        enqueue_alert({
+                            "type": "incident",
+                            "monitor_id": m.id,
+                            "incident_id": inc.id,
+                            "reason": inc.reason
+                        })
     finally:
         s.close()
+
 
 if __name__ == "__main__":
     # Be resilient if DB is still coming up or tables don’t exist yet
     for _ in range(30):
         try:
             ensure_tables_once()
+            print("[monitor] Tables ensured.")
             break
-        except ProgrammingError:
-            time.sleep(1)
+        except (ProgrammingError, OperationalError) as e:
+            print(f"[monitor] Waiting for DB tables ({e})...")
+            time.sleep(2)
+
+    print("[monitor] Starting monitor loop...")
     while True:
         try:
             tick_once()
-        except ProgrammingError:
-            # If tables were dropped/recreated during runtime, recreate and continue
+        except (ProgrammingError, OperationalError) as e:
+            print(f"[monitor] DB error during tick: {e}")
             ensure_tables_once()
         time.sleep(1)
