@@ -37,6 +37,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Print bake plan
+        run: |
+          docker buildx bake \
+            --file ./docker-compose.yml \
+            --set api.tags=foo \
+            --set monitor.tags=foo \
+            --set notifier.tags=foo \
+            --set status-web.tags=foo \
+            --print
+
+
       # Build & push the 4 images using docker-compose as a bake file
       - name: Build & push
         uses: docker/bake-action@v5
@@ -44,12 +55,18 @@ jobs:
           push: true
           files: ./docker-compose.yml
           set: |
-            *.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-{{service}}:buildcache
-            *.cache-to=type=registry,mode=max,ref=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-{{service}}:buildcache
-            api.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }}
-            monitor.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
-            notifier.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
-            status-web.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
+            api.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:buildcache
+            api.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:buildcache
+            monitor.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
+            monitor.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
+            notifier.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
+            notifier.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
+            status-web.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:buildcache
+            status-web.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:buildcache
+            api.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }}
+            monitor.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
+            notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
+            status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
 
       # ---- DevSecOps (SBOM + Trivy) ----
       - name: Install Syft (SBOM)
