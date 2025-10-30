@@ -1,4 +1,5 @@
 name: ci
+
 on:
   push:
     branches: [ main ]
@@ -13,24 +14,34 @@ jobs:
   build-scan-push:
     runs-on: ubuntu-latest
 
-    # Resolve owner/repo dynamically; GHCR needs lowercase
     env:
       REGISTRY: ghcr.io
-      OWNER: ${{ github.repository_owner }}
-      REPO: ${{ github.event.repository.name }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Normalize OWNER/REPO to lowercase (required by GHCR)
-        id: normalize
+      # GHCR requires lowercase owner/repo in image paths
+      - name: Normalize owner/repo (lowercase)
+        id: norm
         run: |
-          echo "owner_lc=$(echo '${{ env.OWNER }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "repo_lc=$(echo '${{ env.REPO }}'  | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "repo_lc=$(echo '${GITHUB_REPOSITORY#*/}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
+      # Prefer a Personal Access Token (classic) with write:packages
+      # Create one and add as repo secret GHCR_PAT
+      - name: Log in to GHCR (PAT)
+        if: ${{ secrets.GHCR_PAT != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ steps.norm.outputs.owner_lc }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # Fallback to GITHUB_TOKEN if PAT not provided (requires “Read and write permissions” in repo → Settings → Actions)
+      - name: Log in to GHCR (GITHUB_TOKEN fallback)
+        if: ${{ secrets.GHCR_PAT == '' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -41,32 +52,23 @@ jobs:
         run: |
           docker buildx bake \
             --file ./docker-compose.yml \
-            --set api.tags=foo \
-            --set monitor.tags=foo \
-            --set notifier.tags=foo \
-            --set status-web.tags=foo \
+            --set api.tags=print-only \
+            --set monitor.tags=print-only \
+            --set notifier.tags=print-only \
+            --set status-web.tags=print-only \
             --print
 
-
-      # Build & push the 4 images using docker-compose as a bake file
-      - name: Build & push
+      # First get a clean, successful push (no cache exports to avoid 403 on buildcache HEAD)
+      - name: Build & push images
         uses: docker/bake-action@v5
         with:
           push: true
           files: ./docker-compose.yml
           set: |
-            api.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:buildcache
-            api.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:buildcache
-            monitor.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
-            monitor.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
-            notifier.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
-            notifier.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
-            status-web.cache-from=type=registry,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:buildcache
-            status-web.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:buildcache
-            api.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }}
-            monitor.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
-            notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
-            status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
+            api.tags=${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-api:sha-${{ github.sha }}
+            monitor.tags=${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
+            notifier.tags=${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
+            status-web.tags=${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
 
       # ---- DevSecOps (SBOM + Trivy) ----
       - name: Install Syft (SBOM)
@@ -80,28 +82,32 @@ jobs:
 
       - name: Scan api
         run: |
-          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${GITHUB_SHA} -o spdx-json > sbom-api.json
-          trivy image --format sarif --output trivy-api.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${GITHUB_SHA} || true
+          syft ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-api:sha-${GITHUB_SHA} -o spdx-json > sbom-api.json
+          trivy image --format sarif --output trivy-api.sarif ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-api:sha-${GITHUB_SHA} || true
       - uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: trivy-api.sarif }
+        with:
+          sarif_file: trivy-api.sarif
 
       - name: Scan monitor
         run: |
-          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} -o spdx-json > sbom-monitor.json
-          trivy image --format sarif --output trivy-monitor.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} || true
+          syft ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} -o spdx-json > sbom-monitor.json
+          trivy image --format sarif --output trivy-monitor.sarif ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} || true
       - uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: trivy-monitor.sarif }
+        with:
+          sarif_file: trivy-monitor.sarif
 
       - name: Scan notifier
         run: |
-          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} -o spdx-json > sbom-notifier.json
-          trivy image --format sarif --output trivy-notifier.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} || true
+          syft ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} -o spdx-json > sbom-notifier.json
+          trivy image --format sarif --output trivy-notifier.sarif ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} || true
       - uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: trivy-notifier.sarif }
+        with:
+          sarif_file: trivy-notifier.sarif
 
       - name: Scan status-web
         run: |
-          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} -o spdx-json > sbom-web.json
-          trivy image --format sarif --output trivy-web.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} || true
+          syft ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} -o spdx-json > sbom-web.json
+          trivy image --format sarif --output trivy-web.sarif ${{ env.REGISTRY }}/${{ steps.norm.outputs.owner_lc }}/${{ steps.norm.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} || true
       - uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: trivy-web.sarif }
+        with:
+          sarif_file: trivy-web.sarif
