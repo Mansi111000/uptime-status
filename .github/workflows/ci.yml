@@ -13,7 +13,6 @@ jobs:
   build-scan-push:
     runs-on: ubuntu-latest
 
-    # Resolve owner/repo dynamically; GHCR requires lowercase
     env:
       REGISTRY: ghcr.io
       OWNER: ${{ github.repository_owner }}
@@ -47,14 +46,12 @@ jobs:
             --set status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} \
             --print
 
-      # Build & push all 4 images via docker-compose as bake file
       - name: Build & push
         uses: docker/bake-action@v5
         with:
           push: true
           files: ./docker-compose.yml
           set: |
-            # Keep only cache-to (first run has no cache in registry; cache-from caused 403 HEADs)
             api.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:buildcache
             monitor.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
             notifier.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
@@ -64,7 +61,6 @@ jobs:
             notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
             status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
 
-      # ---- DevSecOps (SBOM + Trivy) ----
       - name: Install Syft (SBOM)
         uses: anchore/sbom-action/download-syft@v0.17.5
 
