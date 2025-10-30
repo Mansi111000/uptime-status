@@ -2,10 +2,10 @@ resources:
   - ../../base
 images:
   - name: ghcr.io/mansi111000/uptime-status-api
-    newTag: dev
+    newTag: 8fd75a7
   - name: ghcr.io/mansi111000/uptime-status-status-web
-    newTag: dev
+    newTag: 8fd75a7
   - name: ghcr.io/mansi111000/uptime-status-monitor
-    newTag: dev
+    newTag: 8fd75a7
   - name: ghcr.io/mansi111000/uptime-status-notifier
-    newTag: dev
+    newTag: 8fd75a7
