@@ -60,7 +60,7 @@ jobs:
             --set notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} \
             --set status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} \
             --print
-
+      #abcd
       # First push: only cache-to (avoid 403 HEAD on empty caches)
       - name: Build & push
         uses: docker/bake-action@v5
