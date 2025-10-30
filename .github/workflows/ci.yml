@@ -81,10 +81,10 @@ jobs:
       - name: Install Syft (SBOM)
         uses: anchore/sbom-action/download-syft@v0.17.5
 
-      - name: Install Trivy
-        uses: aquasecurity/trivy-action@0.24.0
-        with:
-          trivy_version: v0.55.0
+      # Install Trivy CLI (so we can run `trivy image ...` ourselves)
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.5
+
 
       - name: Scan api
         continue-on-error: true
