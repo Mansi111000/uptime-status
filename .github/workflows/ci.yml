@@ -1,69 +1,90 @@
-name: CI
-
+name: ci
 on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
-env:
-  REGISTRY: ghcr.io
-  OWNER: OWNER
-  REPO: REPO
+permissions:
+  contents: read
+  packages: write
+  security-events: write
 
 jobs:
-  build:
+  build-scan-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    strategy:
-      matrix:
-        svc: [api, status-web, monitor, notifier]
+
+    # Resolve owner/repo dynamically; GHCR needs lowercase
+    env:
+      REGISTRY: ghcr.io
+      OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.event.repository.name }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set image vars
-        id: vars
+      - name: Normalize OWNER/REPO to lowercase (required by GHCR)
+        id: normalize
         run: |
-          IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.REPO }}-${{ matrix.svc }}
-          TAG=${GITHUB_SHA::7}
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "owner_lc=$(echo '${{ env.OWNER }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "repo_lc=$(echo '${{ env.REPO }}'  | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Build
-        uses: docker/build-push-action@v5
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          context: ./services/${{ matrix.svc }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build & push the 4 images using docker-compose as a bake file
+      - name: Build & push
+        uses: docker/bake-action@v5
+        with:
           push: true
-          tags: |
-            ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
-            ${{ steps.vars.outputs.image }}:dev
+          files: ./docker-compose.yml
+          set: |
+            *.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-{{service}}:buildcache
+            *.cache-to=type=registry,mode=max,ref=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-{{service}}:buildcache
+            api.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }}
+            monitor.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
+            notifier.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
+            status-web.tags=${{ env.REGISTRY }}/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
 
-      - name: Trivy image scan (non-blocking)
-        uses: aquasecurity/trivy-action@0.22.0
+      # ---- DevSecOps (SBOM + Trivy) ----
+      - name: Install Syft (SBOM)
+        uses: anchore/sbom-action/download-syft@v0.17.5
+
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
-          format: sarif
-          output: trivy-${{ matrix.svc }}.sarif
-          ignore-unfixed: true
+          trivy_version: v0.55.0
         continue-on-error: true
 
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-${{ matrix.svc }}.sarif
+      - name: Scan api
+        run: |
+          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${GITHUB_SHA} -o spdx-json > sbom-api.json
+          trivy image --format sarif --output trivy-api.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${GITHUB_SHA} || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-api.sarif }
 
-      - name: Cosign sign (keyless)
-        uses: sigstore/cosign-installer@v3
-      - run: |
-          cosign sign --yes ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
-          cosign sign --yes ${{ steps.vars.outputs.image }}:dev
+      - name: Scan monitor
+        run: |
+          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} -o spdx-json > sbom-monitor.json
+          trivy image --format sarif --output trivy-monitor.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${GITHUB_SHA} || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-monitor.sarif }
+
+      - name: Scan notifier
+        run: |
+          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} -o spdx-json > sbom-notifier.json
+          trivy image --format sarif --output trivy-notifier.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${GITHUB_SHA} || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-notifier.sarif }
+
+      - name: Scan status-web
+        run: |
+          syft ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} -o spdx-json > sbom-web.json
+          trivy image --format sarif --output trivy-web.sarif ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-web.sarif }

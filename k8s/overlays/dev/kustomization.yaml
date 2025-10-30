@@ -1,11 +1,11 @@
 resources:
   - ../../base
 images:
-  - name: ghcr.io/OWNER/REPO-api
+  - name: ghcr.io/mansi111000/uptime-status-api
     newTag: dev
-  - name: ghcr.io/OWNER/REPO-status-web
+  - name: ghcr.io/mansi111000/uptime-status-status-web
     newTag: dev
-  - name: ghcr.io/OWNER/REPO-monitor
+  - name: ghcr.io/mansi111000/uptime-status-monitor
     newTag: dev
-  - name: ghcr.io/OWNER/REPO-notifier
+  - name: ghcr.io/mansi111000/uptime-status-notifier
     newTag: dev

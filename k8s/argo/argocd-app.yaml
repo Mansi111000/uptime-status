@@ -1,13 +1,33 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: uptime
+  name: uptime-status
   namespace: argocd
+  annotations:
+    # Let Image Updater manage images on this App and write back through Argo CD
+    argocd-image-updater.argoproj.io/write-back-method: argocd
+    argocd-image-updater.argoproj.io/update-strategy: digest
+
+    # Map of container name => image repo (no tag here)
+    # Make sure container names in your Deployments are exactly: api, monitor, notifier, status-web
+    argocd-image-updater.argoproj.io/image-list: |
+      api=ghcr.io/Mansi111000/uptime-status-api
+      monitor=ghcr.io/Mansi111000/uptime-status-monitor
+      notifier=ghcr.io/Mansi111000/uptime-status-notifier
+      status-web=ghcr.io/Mansi111000/uptime-status-status-web
+
+    # Optional: restrict tags Image Updater considers to your CI style (sha-<short/fullsha>)
+    argocd-image-updater.argoproj.io/api.update-tag-regex: ^sha-[0-9a-f]{7,40}$
+    argocd-image-updater.argoproj.io/monitor.update-tag-regex: ^sha-[0-9a-f]{7,40}$
+    argocd-image-updater.argoproj.io/notifier.update-tag-regex: ^sha-[0-9a-f]{7,40}$
+    argocd-image-updater.argoproj.io/status-web.update-tag-regex: ^sha-[0-9a-f]{7,40}$
+
 spec:
-  project: uptime
+  project: default
   source:
-    repoURL: https://github.com/YOUR_USER/uptime-status
+    repoURL: https://github.com/Mansi111000/uptime-status.git
     targetRevision: main
+    # ⚠️ Usually we sync the base only:
     path: k8s/base
   destination:
     server: https://kubernetes.default.svc
@@ -16,3 +36,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

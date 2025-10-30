@@ -14,7 +14,7 @@ spec:
         runAsUser: 10001
       containers:
         - name: status-web
-          image: ghcr.io/OWNER/REPO-status-web:dev
+          image: ghcr.io/Mansi111000/uptime-status-status-web:sha-PLACEHOLDER
           ports: [{ containerPort: 3000 }]
           env:
             - name: NEXT_PUBLIC_API_URL
