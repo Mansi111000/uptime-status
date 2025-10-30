@@ -14,12 +14,12 @@ jobs:
   build-scan-push:
     runs-on: ubuntu-latest
 
-    # Shared env for the job
     env:
       REGISTRY: ghcr.io
       OWNER: ${{ github.repository_owner }}
       REPO: ${{ github.event.repository.name }}
-      # proxy secret → env so we can safely use it in `if:` conditions
+      # If you create a repo/org secret GHCR_PAT (with write:packages),
+      # we'll prefer it over GITHUB_TOKEN.
       GHCR_PAT: ${{ secrets.GHCR_PAT }}
 
     steps:
@@ -33,7 +33,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Prefer PAT (write:packages) if you created repo/org secret GHCR_PAT
+      # Prefer PAT (requires write:packages)
       - name: Log in to GHCR (PAT)
         if: ${{ env.GHCR_PAT != '' }}
         uses: docker/login-action@v3
@@ -42,7 +42,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ env.GHCR_PAT }}
 
-      # Fallback to the built-in GITHUB_TOKEN (packages:write must be enabled)
+      # Fallback: built-in GITHUB_TOKEN (ensure packages:write permission)
       - name: Log in to GHCR (GITHUB_TOKEN)
         if: ${{ env.GHCR_PAT == '' }}
         uses: docker/login-action@v3
@@ -61,7 +61,7 @@ jobs:
             --set status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${GITHUB_SHA} \
             --print
 
-      # First push: only cache-to (no cache-from to avoid 403 HEADs on empty registries)
+      # First push: only cache-to (avoid 403 HEAD on empty caches)
       - name: Build & push
         uses: docker/bake-action@v5
         with:
@@ -77,16 +77,14 @@ jobs:
             notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
             status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
 
-      # --- DevSecOps (SBOM + Trivy) ---
+      # ---- DevSecOps (SBOM + Trivy) ----
       - name: Install Syft (SBOM)
         uses: anchore/sbom-action/download-syft@v0.17.5
 
-      # Install Trivy CLI
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
           trivy --version
-
 
       - name: Scan api
         continue-on-error: true
@@ -96,6 +94,7 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-api.sarif
+          category: trivy-api
 
       - name: Scan monitor
         continue-on-error: true
@@ -105,6 +104,7 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-monitor.sarif
+          category: trivy-monitor
 
       - name: Scan notifier
         continue-on-error: true
@@ -114,6 +114,7 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-notifier.sarif
+          category: trivy-notifier
 
       - name: Scan status-web
         continue-on-error: true
@@ -123,3 +124,4 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-web.sarif
+          category: trivy-status-web
