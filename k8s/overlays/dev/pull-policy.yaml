@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: uptime
+spec:
+  template:
+    spec:
+      # comment this block if your GHCR packages are PUBLIC
+      # imagePullSecrets:
+      #   - name: ghcr-creds
+      containers:
+        - name: api
+          imagePullPolicy: IfNotPresent
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor
+  namespace: uptime
+spec:
+  template:
+    spec:
+      # imagePullSecrets:
+      #   - name: ghcr-creds
+      containers:
+        - name: monitor
+          imagePullPolicy: IfNotPresent
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  namespace: uptime
+spec:
+  template:
+    spec:
+      # imagePullSecrets:
+      #   - name: ghcr-creds
+      containers:
+        - name: notifier
+          imagePullPolicy: IfNotPresent
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-web
+  namespace: uptime
+spec:
+  template:
+    spec:
+      # imagePullSecrets:
+      #   - name: ghcr-creds
+      containers:
+        - name: status-web
+          imagePullPolicy: IfNotPresent

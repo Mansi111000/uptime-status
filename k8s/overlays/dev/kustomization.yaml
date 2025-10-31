@@ -1,11 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
 resources:
   - ../../base
+
+# Replace all four images with your GHCR names + the latest CI tag
 images:
-  - name: ghcr.io/mansi111000/uptime-status-api
-    newTag: dev
-  - name: ghcr.io/mansi111000/uptime-status-status-web
-    newTag: dev
-  - name: ghcr.io/mansi111000/uptime-status-monitor
-    newTag: dev
-  - name: ghcr.io/mansi111000/uptime-status-notifier
-    newTag: dev
+  - name: api
+    newName: ghcr.io/mansi111000/uptime-status-api
+    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+  - name: monitor
+    newName: ghcr.io/mansi111000/uptime-status-monitor
+    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+  - name: notifier
+    newName: ghcr.io/mansi111000/uptime-status-notifier
+    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+  - name: status-web
+    newName: ghcr.io/mansi111000/uptime-status-status-web
+    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+
+# Patch base to allow pulling from registry and (optionally) use imagePullSecrets
+patches:
+  - path: pull-policy.yaml
