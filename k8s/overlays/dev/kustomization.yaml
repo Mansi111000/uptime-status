@@ -8,16 +8,16 @@ resources:
 images:
   - name: api
     newName: ghcr.io/mansi111000/uptime-status-api
-    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+    newTag: 4c621fb
   - name: monitor
     newName: ghcr.io/mansi111000/uptime-status-monitor
-    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+    newTag: 4c621fb
   - name: notifier
     newName: ghcr.io/mansi111000/uptime-status-notifier
-    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+    newTag: 4c621fb
   - name: status-web
     newName: ghcr.io/mansi111000/uptime-status-status-web
-    newTag: sha-sha256:1ac4d3d07ca5a14aa91d4fd4f3966b9bd971a90a045befeeb84d680d1bdcbd38
+    newTag: 4c621fb
 
 # Patch base to allow pulling from registry and (optionally) use imagePullSecrets
 patches:
