@@ -21,21 +21,21 @@ jobs:
       GHCR_PAT: ${{ secrets.GHCR_PAT }}
 
     steps:
-      # --- Step 1: Checkout Repo ---
+      # --- Checkout ---
       - uses: actions/checkout@v4
 
-      # --- Step 2: Normalize OWNER/REPO to lowercase (GHCR requires lowercase) ---
+      # --- Normalize repo/owner (GHCR lowercase rule) ---
       - name: Normalize OWNER/REPO
         id: normalize
         run: |
           echo "owner_lc=$(echo '${{ env.OWNER }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "repo_lc=$(echo '${{ env.REPO }}'  | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      # --- Step 3: Setup Docker Buildx ---
+      # --- Setup Docker buildx ---
       - uses: docker/setup-buildx-action@v3
 
-      # --- Step 4: Log in to GHCR ---
-      - name: Log in to GHCR (PAT)
+      # --- Login to GHCR ---
+      - name: Login to GHCR (PAT)
         if: ${{ env.GHCR_PAT != '' }}
         uses: docker/login-action@v3
         with:
@@ -43,7 +43,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ env.GHCR_PAT }}
 
-      - name: Log in to GHCR (fallback GITHUB_TOKEN)
+      - name: Login to GHCR (fallback GITHUB_TOKEN)
         if: ${{ env.GHCR_PAT == '' }}
         uses: docker/login-action@v3
         with:
@@ -51,7 +51,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- Step 5: Sanity Check Plan ---
+      # --- Sanity plan ---
       - name: Print bake plan
         run: |
           docker buildx bake \
@@ -59,8 +59,8 @@ jobs:
             --set api.tags=foo --set monitor.tags=foo --set notifier.tags=foo --set status-web.tags=foo \
             --print
 
-      # --- Step 6: Build & Push (with dev-latest) ---
-      - name: Build & Push Docker Images
+      # --- Build & push all images (with separate tags) ---
+      - name: Build & Push Images
         uses: docker/bake-action@v5
         with:
           push: true
@@ -70,12 +70,16 @@ jobs:
             monitor.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:buildcache
             notifier.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:buildcache
             status-web.cache-to=type=registry,mode=max,ref=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:buildcache
-            api.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }},ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:dev-latest
-            monitor.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }},ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:dev-latest
-            notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }},ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:dev-latest
-            status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }},ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:dev-latest
+            api.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:sha-${{ github.sha }}
+            api.tags+=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-api:dev-latest
+            monitor.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:sha-${{ github.sha }}
+            monitor.tags+=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-monitor:dev-latest
+            notifier.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:sha-${{ github.sha }}
+            notifier.tags+=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-notifier:dev-latest
+            status-web.tags=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:sha-${{ github.sha }}
+            status-web.tags+=ghcr.io/${{ steps.normalize.outputs.owner_lc }}/${{ steps.normalize.outputs.repo_lc }}-status-web:dev-latest
 
-      # --- Step 7: DevSecOps — SBOM + Trivy ---
+      # --- DevSecOps: SBOM + Trivy Scanning ---
       - name: Install Syft (SBOM)
         uses: anchore/sbom-action/download-syft@v0.17.5
 
@@ -84,7 +88,7 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
           trivy --version
 
-      # --- Step 8: Scan Images and Upload Reports ---
+      # --- Scan API ---
       - name: Scan API Image
         continue-on-error: true
         run: |
@@ -95,6 +99,7 @@ jobs:
           sarif_file: trivy-api.sarif
           category: trivy-api
 
+      # --- Scan Monitor ---
       - name: Scan Monitor Image
         continue-on-error: true
         run: |
@@ -105,6 +110,7 @@ jobs:
           sarif_file: trivy-monitor.sarif
           category: trivy-monitor
 
+      # --- Scan Notifier ---
       - name: Scan Notifier Image
         continue-on-error: true
         run: |
@@ -115,6 +121,7 @@ jobs:
           sarif_file: trivy-notifier.sarif
           category: trivy-notifier
 
+      # --- Scan Status Web ---
       - name: Scan Status Web Image
         continue-on-error: true
         run: |
